@@ -43,17 +43,28 @@ class FNAgent():
     def update(self, experiences, gamma):
         raise Exception("You have to implements update method.")
 
+
+# 勉強会で説明
     def policy(self, s):
+        # epsilon以下の場合か初期化されていないとき、ランダムにactionを返す
         if np.random.random() < self.epsilon or not self.initialized:
             return np.random.randint(len(self.actions))
+
+        # epsilon以上の場合はpolicyに応じたactionを返す
         else:
+            # 状態sに応じた行動ごとの価値を予測する
             estimates = self.estimate(s)
+
+            # 行動確率を予測する場合（Policyベースの場合）は行動をサンプリング
             if self.estimate_probs:
                 action = np.random.choice(self.actions,
                                           size=1, p=estimates)[0]
                 return action
+
+            # 価値が最大の行動を必ず選ぶ場合（Valueベースの場合：価値反復法）
             else:
                 return np.argmax(estimates)
+
 
     def play(self, env, episode_count=5, render=True):
         for e in range(episode_count):
@@ -93,6 +104,9 @@ class Trainer():
         snaked = snaked.replace("_trainer", "")
         return snaked
 
+
+# 勉強会で説明
+    # 学習ループ
     def train_loop(self, env, agent, episode=200, initial_count=-1,
                    render=False, observe_interval=0):
         self.experiences = deque(maxlen=self.buffer_size)
@@ -102,32 +116,50 @@ class Trainer():
         frames = []
 
         for i in range(episode):
-            s = env.reset()
+            s = env.reset() # 環境をリセットする
             done = False
             step_count = 0
             self.episode_begin(i, agent)
+
+            # エピソード開始
             while not done:
                 if render:
                     env.render()
+
+                # トレーニングフラグがON　かつ　最初か監視インターバルのとき
+                # frameに状態を蓄積する
                 if self.training and observe_interval > 0 and\
                    (self.training_count == 1 or
                     self.training_count % observe_interval == 0):
                     frames.append(s)
 
+                # 状態ｓにおける行動をポリシーから決定する
                 a = agent.policy(s)
+
+                # env=Observerを1ステップ進める（行動して結果を得る）
+                # 新しい状態n_stateを獲得する。状態によっては終了フラグdoneが立つ。
                 n_state, reward, done, info = env.step(a)
+
+                # 経験を保存する
                 e = Experience(s, a, reward, n_state, done)
                 self.experiences.append(e)
+
+                ## 経験がbuffer_size(def=1024)溜まっていたら学習フラグを立てる
                 if not self.training and \
                    len(self.experiences) == self.buffer_size:
                     self.begin_train(i, agent)
                     self.training = True
 
+                # ※学習フラグが立っていたら処理される
+                # Trainerを1ステップ進める（学習する）
+                 # (1)experienceからバッチサイズ(def=32)でランダムサンプリング
+                 # (2)モデル更新(Q学習)
                 self.step(i, step_count, agent, e)
 
                 s = n_state
                 step_count += 1
             else:
+                ## エピソード終了時の処理（データ保存等）
                 self.episode_end(i, step_count, agent)
 
                 if not self.training and \
